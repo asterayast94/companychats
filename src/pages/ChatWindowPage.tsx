@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Paperclip, Video, MoreVertical } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { conversations, users, messages as initialMessages, Message } from '../mock/mockData';
+import { socketService } from '../services/socketService';
+import { apiService } from '../services/apiService';
 import MessageBubble from '../components/MessageBubble';
 import VideoCallModal from '../components/VideoCallModal';
 
@@ -43,6 +45,29 @@ export default function ChatWindowPage() {
     }
   }, [isTyping]);
 
+  useEffect(() => {
+    socketService.connect();
+    if (conversationId) {
+      socketService.joinChat(Number(conversationId));
+    }
+
+    socketService.onMessage((data) => {
+      const message: Message = {
+        id: Date.now(),
+        conversationId: data.chatId,
+        senderId: data.senderId,
+        type: 'text',
+        body: data.body,
+        createdAt: data.timestamp || new Date().toISOString()
+      };
+      setMessages(prev => [...prev, message]);
+    });
+
+    return () => {
+      socketService.offMessage();
+    };
+  }, [conversationId]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -61,6 +86,7 @@ export default function ChatWindowPage() {
     };
 
     setMessages(prev => [...prev, message]);
+    socketService.sendMessage(conversation.id, newMessage.trim(), currentUser.id);
     setNewMessage('');
 
     setTimeout(() => {

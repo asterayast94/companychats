@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Search } from 'lucide-react';
+import { LogOut, Search, Link2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { conversations, users, messages } from '../mock/mockData';
 import ChatListItem from '../components/ChatListItem';

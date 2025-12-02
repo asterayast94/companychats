@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Copy, Check, Phone, Loader } from 'lucide-react';
+import { Copy, Check, Phone, Loader, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { apiService } from '../services/apiService';
+import { socketService } from '../services/socketService';
 import { users } from '../mock/mockData';
 
 export default function JoinLinkPage() {
@@ -9,8 +11,9 @@ export default function JoinLinkPage() {
   const { currentUser, login } = useAuth();
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
-  const [otherUser, setOtherUser] = useState<typeof users[0] | null>(null);
+  const [isJoining, setIsJoining] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!linkId) {
@@ -18,25 +21,33 @@ export default function JoinLinkPage() {
       return;
     }
 
-    const decodeLink = (id: string) => {
+    const joinFlow = async () => {
       try {
-        const decoded = atob(id);
-        const [creatorId] = decoded.split(':');
-        return parseInt(creatorId);
-      } catch {
-        return null;
+        setIsLoading(true);
+
+        if (!currentUser) {
+          const guestUser = users[1];
+          login(guestUser);
+        }
+
+        const joined = await apiService.joinCall(linkId, currentUser?.id || users[1].id);
+        if (!joined) {
+          setError('Failed to join call');
+          return;
+        }
+
+        socketService.connect();
+        socketService.joinCall(linkId, currentUser?.id || users[1].id);
+      } catch (err) {
+        console.error('Error:', err);
+        setError('An error occurred');
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    const creatorId = decodeLink(linkId);
-    const user = users.find(u => u.id === creatorId);
-
-    if (user) {
-      setOtherUser(user);
-    } else {
-      navigate('/');
-    }
-  }, [linkId, navigate]);
+    joinFlow();
+  }, [linkId, currentUser, navigate, login]);
 
   const handleCopyLink = () => {
     const fullLink = `${window.location.origin}/join/${linkId}`;
@@ -45,20 +56,21 @@ export default function JoinLinkPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleStartCall = () => {
-    if (!currentUser) {
-      const availableUser = users.find(u => u.id !== otherUser?.id);
-      if (availableUser) {
-        login(availableUser);
-      }
-    }
-    setIsStarting(true);
-    setTimeout(() => {
+  const handleStartCall = async () => {
+    if (!linkId) return;
+
+    setIsJoining(true);
+    try {
       navigate(`/video-call/${linkId}`);
-    }, 500);
+    } catch (err) {
+      console.error('Error starting call:', err);
+      setIsJoining(false);
+    }
   };
 
-  if (!otherUser) {
+  const hostUser = users[0];
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-teal-50 to-blue-50 flex items-center justify-center">
         <Loader className="w-8 h-8 text-teal-600 animate-spin" />
@@ -69,41 +81,55 @@ export default function JoinLinkPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-blue-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 text-teal-600 hover:text-teal-700 mb-6 transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Back</span>
+        </button>
+
         <div className="text-center mb-8">
           <div className="relative w-24 h-24 mx-auto mb-4">
             <img
-              src={otherUser.avatar}
-              alt={otherUser.name}
+              src={hostUser.avatar}
+              alt={hostUser.name}
               className="w-24 h-24 rounded-full"
             />
-            {otherUser.status === 'online' && (
+            {hostUser.status === 'online' && (
               <div className="absolute bottom-0 right-0 w-6 h-6 bg-green-500 rounded-full border-4 border-white"></div>
             )}
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {otherUser.name}
+            {hostUser.name}
           </h1>
-          <p className="text-gray-600 mb-1">wants to connect with you</p>
+          <p className="text-gray-600 mb-1">is inviting you to a video call</p>
           <p className="text-sm text-gray-500">
-            {otherUser.status === 'online' ? 'Active now' : 'Away'}
+            {hostUser.status === 'online' ? 'Active now' : 'Away'}
           </p>
         </div>
 
-        <div className="space-y-4 mb-8">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-3 mb-6">
           <button
             onClick={handleStartCall}
-            disabled={isStarting}
+            disabled={isJoining}
             className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {isStarting ? (
+            {isJoining ? (
               <>
                 <Loader className="w-5 h-5 animate-spin" />
-                Starting...
+                Joining...
               </>
             ) : (
               <>
                 <Phone className="w-5 h-5" />
-                Start Video Call
+                Join Video Call
               </>
             )}
           </button>
@@ -115,7 +141,7 @@ export default function JoinLinkPage() {
             {copied ? (
               <>
                 <Check className="w-5 h-5" />
-                Link Copied!
+                Copied!
               </>
             ) : (
               <>
@@ -126,31 +152,8 @@ export default function JoinLinkPage() {
           </button>
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-4 mb-6">
-          <p className="text-xs text-gray-600 mb-2 font-semibold">SHARE THIS LINK</p>
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded p-2">
-            <input
-              type="text"
-              value={`${window.location.origin}/join/${linkId}`}
-              readOnly
-              className="flex-1 text-sm text-gray-900 bg-transparent focus:outline-none"
-            />
-            <button
-              onClick={handleCopyLink}
-              className="text-teal-600 hover:text-teal-700 transition"
-            >
-              <Copy className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="text-center">
-          <button
-            onClick={() => navigate('/')}
-            className="text-sm text-teal-600 hover:text-teal-700 font-medium transition"
-          >
-            Go Back to Login
-          </button>
+        <div className="bg-gray-50 rounded-lg p-4 text-center text-xs text-gray-600">
+          <p>Share this link with others to invite them to the call</p>
         </div>
       </div>
     </div>
