@@ -52,6 +52,11 @@ export default function ChatListPage() {
     navigate(`/chat/${conversationId}`);
   };
 
+  const handleCreateLink = () => {
+    const linkId = btoa(`${currentUser.id}:${Date.now()}`);
+    navigate(`/create-link/${linkId}`);
+  };
+
   if (!currentUser) {
     navigate('/');
     return null;
@@ -72,13 +77,22 @@ export default function ChatListPage() {
               <p className="text-xs text-teal-100">Active now</p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="p-2 hover:bg-teal-600 rounded-lg transition"
-            title="Logout"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCreateLink}
+              className="p-2 hover:bg-teal-600 rounded-lg transition"
+              title="Create video call link"
+            >
+              <Link2 className="w-5 h-5" />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="p-2 hover:bg-teal-600 rounded-lg transition"
+              title="Logout"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="relative">

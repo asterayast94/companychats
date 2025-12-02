@@ -3,6 +3,9 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import ChatListPage from './pages/ChatListPage';
 import ChatWindowPage from './pages/ChatWindowPage';
+import CreateLinkPage from './pages/CreateLinkPage';
+import JoinLinkPage from './pages/JoinLinkPage';
+import VideoCallLinkPage from './pages/VideoCallLinkPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAuth();
@@ -31,6 +34,16 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/create-link/:linkId"
+            element={
+              <ProtectedRoute>
+                <CreateLinkPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/join/:linkId" element={<JoinLinkPage />} />
+          <Route path="/video-call/:linkId" element={<VideoCallLinkPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
