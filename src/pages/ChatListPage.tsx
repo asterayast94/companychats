@@ -1,44 +1,64 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import type { ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Search, Link2 } from 'lucide-react';
+import { LogOut, Search, Link2, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { conversations, users, messages } from '../mock/mockData';
+import { apiService, ChatResponse } from '../services/apiService';
 import ChatListItem from '../components/ChatListItem';
 
 export default function ChatListPage() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [chats, setChats] = useState<ChatResponse[]>([]);
+
+  interface ChatItem {
+    conversation: { id: number; type: string; participants: string[]; unreadCount?: number };
+    otherUser: { id: string; name: string; avatar?: string };
+    lastMessage?: { body: string; time?: number } | null;
+  }
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    (async () => {
+      const data = await apiService.getChatsForUser(String(currentUser.id));
+      setChats(data);
+    })();
+  }, [currentUser]);
 
   const userConversations = useMemo(() => {
     if (!currentUser) return [];
 
-    return conversations
-      .filter(conv => conv.participants.includes(currentUser.id))
-      .map(conv => {
-        const otherUserId = conv.participants.find(id => id !== currentUser.id);
-        const otherUser = users.find(u => u.id === otherUserId);
-        const convMessages = messages.filter(m => m.conversationId === conv.id);
-        const lastMessage = convMessages[convMessages.length - 1];
+    return chats
+      .filter((conv: ChatResponse) => Array.isArray(conv.users) && conv.users.includes(String(currentUser.id)))
+      .map((conv: ChatResponse) => {
+        const otherUserId = conv.users.find((id: string) => id !== String(currentUser.id)) || 'unknown';
+        const otherUser = {
+          id: otherUserId,
+          name: otherUserId,
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(otherUserId)}`,
+        };
+
+        const lastMessage = conv.messages && conv.messages.length > 0 ? conv.messages[conv.messages.length - 1] : null;
 
         return {
-          conversation: conv,
+          conversation: { id: conv.id, type: 'private', participants: conv.users as any },
           otherUser,
           lastMessage
         };
       })
-      .filter(item => item.otherUser)
-      .sort((a, b) => {
-        const aTime = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
-        const bTime = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
+      .sort((a: ChatItem, b: ChatItem) => {
+        const aTime = a.lastMessage ? (a.lastMessage.time || 0) : 0;
+        const bTime = b.lastMessage ? (b.lastMessage.time || 0) : 0;
         return bTime - aTime;
       });
-  }, [currentUser]);
+  }, [currentUser, chats]);
 
-  const filteredConversations = useMemo(() => {
+  const filteredConversations = useMemo<ChatItem[]>(() => {
     if (!searchQuery.trim()) return userConversations;
 
-    return userConversations.filter(item =>
+    return userConversations.filter((item: ChatItem) =>
       item.otherUser?.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [userConversations, searchQuery]);
@@ -55,6 +75,22 @@ export default function ChatListPage() {
   const handleCreateLink = () => {
     const linkId = btoa(`${currentUser.id}:${Date.now()}`);
     navigate(`/create-link/${linkId}`);
+  };
+
+  const handleNewChat = async () => {
+    const other = window.prompt('Enter user id to start chat with (e.g. u2)');
+    if (!other || !currentUser) return;
+
+    const created = await apiService.createChat([String(currentUser.id), String(other)]);
+    if (created) {
+      // Refresh chat list
+      const data = await apiService.getChatsForUser(String(currentUser.id));
+      setChats(data);
+      // Navigate to created chat
+      navigate(`/chat/${created.id}`);
+    } else {
+      alert('Failed to create chat');
+    }
   };
 
   if (!currentUser) {
@@ -86,6 +122,13 @@ export default function ChatListPage() {
               <Link2 className="w-5 h-5" />
             </button>
             <button
+              onClick={handleNewChat}
+              className="p-2 hover:bg-teal-600 rounded-lg transition"
+              title="Start new chat"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+            <button
               onClick={handleLogout}
               className="p-2 hover:bg-teal-600 rounded-lg transition"
               title="Logout"
@@ -101,7 +144,7 @@ export default function ChatListPage() {
             type="text"
             placeholder="Search conversations..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e: any) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-teal-600 text-white placeholder-teal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
           />
         </div>
@@ -114,18 +157,19 @@ export default function ChatListPage() {
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {filteredConversations.map(({ conversation, otherUser, lastMessage }) => (
-              otherUser && (
-                <ChatListItem
-                  key={conversation.id}
-                  conversation={conversation}
-                  otherUser={otherUser}
-                  lastMessage={lastMessage}
-                  isActive={false}
-                  onClick={() => handleChatClick(conversation.id)}
-                />
-              )
-            ))}
+              {filteredConversations.map((item: ChatItem) => {
+                const { conversation, otherUser, lastMessage } = item;
+                return otherUser ? (
+                  <ChatListItem
+                    key={conversation.id}
+                    conversation={conversation}
+                    otherUser={otherUser}
+                    lastMessage={lastMessage}
+                    isActive={false}
+                    onClick={() => handleChatClick(conversation.id)}
+                  />
+                ) : null;
+              })}
           </div>
         )}
       </div>

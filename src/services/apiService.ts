@@ -2,29 +2,28 @@ const API_BASE_URL = 'http://localhost:4000/compchat/api';
 
 export interface ChatResponse {
   id: number;
-  type: 'private' | 'group';
-  participants: number[];
+  users: string[];
+  messages?: Array<{ from: string; text: string; time: number }>;
 }
 
 export interface MessageResponse {
-  id: number;
-  chatId: number;
-  senderId: number;
-  body: string;
-  createdAt?: string;
+  from: string;
+  text: string;
+  time: number;
 }
 
-export interface CallResponse {
+export interface CallCreateResponse {
   success: boolean;
-  callId: string;
+  call: { callId: string } | null;
 }
 
 export const apiService = {
-  async getChatsForUser(userId: number): Promise<ChatResponse[]> {
+  async getChatsForUser(userId: string): Promise<ChatResponse[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/chats?userId=${userId}`);
+      const response = await fetch(`${API_BASE_URL}/chats/${encodeURIComponent(String(userId))}`);
       if (!response.ok) throw new Error('Failed to fetch chats');
-      return response.json();
+      const data = await response.json();
+      return data.chats || [];
     } catch (error) {
       console.error('Error fetching chats:', error);
       return [];
@@ -33,12 +32,28 @@ export const apiService = {
 
   async getMessages(chatId: number): Promise<MessageResponse[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/messages?chatId=${chatId}`);
+      const response = await fetch(`${API_BASE_URL}/chats/messages/${chatId}`);
       if (!response.ok) throw new Error('Failed to fetch messages');
-      return response.json();
+      const data = await response.json();
+      return data.messages || [];
     } catch (error) {
       console.error('Error fetching messages:', error);
       return [];
+    }
+  },
+
+  async sendMessage(chatId: number, from: string, text: string) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chats/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, from, text }),
+      });
+      if (!response.ok) throw new Error('Failed to send message');
+      return await response.json();
+    } catch (error) {
+      console.error('Error sending message:', error);
+      return null;
     }
   },
 
@@ -49,8 +64,8 @@ export const apiService = {
         headers: { 'Content-Type': 'application/json' },
       });
       if (!response.ok) throw new Error('Failed to create call');
-      const data: CallResponse = await response.json();
-      return data.callId;
+      const data: CallCreateResponse = await response.json();
+      return data.call?.callId || null;
     } catch (error) {
       console.error('Error creating call:', error);
       return null;
@@ -64,14 +79,16 @@ export const apiService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ callId, user: String(user) }),
       });
-      return response.ok;
+      if (!response.ok) return false;
+      const data = await response.json();
+      return data.success === true;
     } catch (error) {
       console.error('Error joining call:', error);
       return false;
     }
   },
 
-  async createChat(users: (string | number)[]): Promise<ChatResponse | null> {
+  async createChat(users: (string | number)[]) {
     try {
       const response = await fetch(`${API_BASE_URL}/chats/create`, {
         method: 'POST',
@@ -79,7 +96,8 @@ export const apiService = {
         body: JSON.stringify({ users: users.map(u => String(u)) }),
       });
       if (!response.ok) throw new Error('Failed to create chat');
-      return response.json();
+      const data = await response.json();
+      return data.chat || null;
     } catch (error) {
       console.error('Error creating chat:', error);
       return null;

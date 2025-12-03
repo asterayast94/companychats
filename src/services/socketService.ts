@@ -24,7 +24,7 @@ export interface WebRTCIceCandidate {
 
 export interface ChatMessage {
   chatId: number;
-  senderId: number;
+  senderId: string;
   body: string;
   timestamp: string;
 }
@@ -98,7 +98,7 @@ export const socketService = {
     }
   },
 
-  sendMessage(chatId: number, message: string, senderId: number): void {
+  sendMessage(chatId: string | number, message: string, senderId: string | number): void {
     if (socket) {
       socket.emit('sendMessage', {
         chatId,
@@ -130,7 +130,23 @@ export const socketService = {
 
   onMessage(callback: (data: ChatMessage) => void): void {
     if (socket) {
-      socket.on('message', callback);
+      // Server emits 'messageReceived' with shape: { chatId, message }
+      socket.on('messageReceived', (payload: any) => {
+        try {
+          const chatId = payload.chatId ?? payload.chat?.id ?? null;
+          const msg = payload.message || payload;
+          const normalized: ChatMessage = {
+            chatId: Number(chatId),
+            senderId: String(msg.from ?? msg.senderId ?? ''),
+            body: msg.text || msg.body || msg.message || '',
+            timestamp: msg.time ? new Date(msg.time).toISOString() : (msg.timestamp || new Date().toISOString()),
+          };
+
+          callback(normalized);
+        } catch (err) {
+          console.error('Error normalizing incoming message', err, payload);
+        }
+      });
     }
   },
 
@@ -166,7 +182,7 @@ export const socketService = {
 
   offMessage(): void {
     if (socket) {
-      socket.off('message');
+      socket.off('messageReceived');
     }
   },
 

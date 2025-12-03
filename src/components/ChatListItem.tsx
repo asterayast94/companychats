@@ -1,10 +1,9 @@
-import { User, Conversation, Message } from '../mock/mockData';
 import { formatDistanceToNow } from '../utils/dateUtils';
 
 interface ChatListItemProps {
-  conversation: Conversation;
-  otherUser: User;
-  lastMessage: Message | undefined;
+  conversation: { id: number; users: string[]; unreadCount?: number };
+  otherUser: { id: string; name: string; avatar?: string; status?: string };
+  lastMessage?: { body: string; createdAt?: string } | null;
   isActive: boolean;
   onClick: () => void;
 }

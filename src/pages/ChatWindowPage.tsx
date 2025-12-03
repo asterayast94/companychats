@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Paperclip, Video, MoreVertical } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { conversations, users, messages as initialMessages, Message } from '../mock/mockData';
 import { socketService } from '../services/socketService';
 import { apiService } from '../services/apiService';
 import MessageBubble from '../components/MessageBubble';
@@ -15,24 +14,62 @@ export default function ChatWindowPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  interface Message {
+    id: number;
+    conversationId: number;
+    senderId: string;
+    type: 'text' | 'file' | 'image';
+    body: string;
+    fileName?: string;
+    fileUrl?: string;
+    createdAt: string;
+  }
+
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
 
-  const conversation = useMemo(() => {
-    return conversations.find(c => c.id === Number(conversationId));
-  }, [conversationId]);
+  const [conversation, setConversation] = useState<any>(null);
+
+  useEffect(() => {
+    if (!conversationId || !currentUser) return;
+    (async () => {
+      const chats = await apiService.getChatsForUser(String(currentUser.id));
+      const conv = chats.find(c => c.id === Number(conversationId));
+      setConversation(conv || null);
+    })();
+  }, [conversationId, currentUser]);
 
   const otherUser = useMemo(() => {
     if (!conversation || !currentUser) return null;
-    const otherUserId = conversation.participants.find(id => id !== currentUser.id);
-    return users.find(u => u.id === otherUserId);
+    const otherUserId = conversation.users.find((id: string) => id !== String(currentUser.id));
+    return {
+      id: otherUserId,
+      name: otherUserId,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(otherUserId)}`,
+    };
   }, [conversation, currentUser]);
 
   const conversationMessages = useMemo(() => {
     return messages.filter(m => m.conversationId === Number(conversationId));
   }, [messages, conversationId]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    (async () => {
+      const msgs = await apiService.getMessages(Number(conversationId));
+      const converted: Message[] = msgs.map((m, idx) => ({
+        id: Date.now() + idx,
+        conversationId: Number(conversationId),
+        senderId: m.from,
+        type: 'text',
+        body: m.text,
+        createdAt: new Date(m.time).toISOString(),
+      }));
+      setMessages(converted);
+    })();
+  }, [conversationId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -52,11 +89,11 @@ export default function ChatWindowPage() {
     }
 
     socketService.onMessage((data) => {
-      const message: Message = {
+      const message = {
         id: Date.now(),
         conversationId: data.chatId,
-        senderId: data.senderId,
-        type: 'text',
+        senderId: String(data.senderId),
+        type: 'text' as const,
         body: data.body,
         createdAt: data.timestamp || new Date().toISOString()
       };
@@ -87,6 +124,8 @@ export default function ChatWindowPage() {
 
     setMessages(prev => [...prev, message]);
     socketService.sendMessage(conversation.id, newMessage.trim(), currentUser.id);
+    // Persist via HTTP API as well
+    apiService.sendMessage(conversation.id, String(currentUser.id), newMessage.trim());
     setNewMessage('');
 
     setTimeout(() => {
@@ -143,13 +182,24 @@ export default function ChatWindowPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsVideoCallOpen(true)}
-              className="p-2 hover:bg-gray-200 rounded-lg transition"
-              title="Start video call"
-            >
-              <Video className="w-5 h-5 text-teal-600" />
-            </button>
+                    <button
+                      onClick={async () => {
+                        if (!currentUser) return;
+                        const callId = await apiService.createCall();
+                        if (callId) {
+                          await apiService.joinCall(callId, String(currentUser.id));
+                          socketService.connect();
+                          socketService.joinCall(callId, String(currentUser.id));
+                          navigate(`/video-call/${callId}`);
+                        } else {
+                          alert('Failed to create call');
+                        }
+                      }}
+                      className="p-2 hover:bg-gray-200 rounded-lg transition"
+                      title="Start video call"
+                    >
+                      <Video className="w-5 h-5 text-teal-600" />
+                    </button>
             <button className="p-2 hover:bg-gray-200 rounded-lg transition">
               <MoreVertical className="w-5 h-5 text-gray-600" />
             </button>

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Loader } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { socketService } from '../services/socketService';
-import { users } from '../mock/mockData';
+import { apiService } from '../services/apiService';
 
 export default function JoinLinkPage() {
   const { linkId } = useParams<{ linkId: string }>();
@@ -15,18 +15,25 @@ export default function JoinLinkPage() {
       navigate('/');
       return;
     }
+    (async () => {
+      if (!currentUser) {
+        const guestUser = {
+          id: `guest-${Date.now()}`,
+          name: `Guest-${Math.floor(Math.random()*1000)}`,
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=guest-${Date.now()}`,
+        };
+        login(guestUser);
+      }
 
-    if (!currentUser) {
-      const guestUser = users[1];
-      login(guestUser);
-    }
+      // Join call on server then signaling channel
+      await apiService.joinCall(linkId, currentUser?.id || `guest-${Date.now()}`);
+      socketService.connect();
+      socketService.joinCall(linkId, currentUser?.id || `guest-${Date.now()}`);
 
-    socketService.connect();
-    socketService.joinCall(linkId, currentUser?.id || users[1].id);
-
-    setTimeout(() => {
-      navigate(`/video-call/${linkId}`);
-    }, 500);
+      setTimeout(() => {
+        navigate(`/video-call/${linkId}`);
+      }, 500);
+    })();
   }, [linkId, currentUser, navigate, login]);
 
   return (

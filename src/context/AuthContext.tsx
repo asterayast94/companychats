@@ -1,5 +1,10 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
-import { User } from '../mock/mockData';
+
+export interface User {
+  id: string;
+  name: string;
+  avatar?: string;
+}
 
 interface AuthContextType {
   currentUser: User | null;

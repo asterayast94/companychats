@@ -1,9 +1,17 @@
-import { Message } from '../mock/mockData';
 import { formatMessageTime } from '../utils/dateUtils';
 import { FileText, Image as ImageIcon } from 'lucide-react';
 
 interface MessageBubbleProps {
-  message: Message;
+  message: {
+    id?: number;
+    conversationId?: number;
+    senderId: string;
+    type: 'text' | 'file' | 'image';
+    body: string;
+    fileName?: string;
+    fileUrl?: string;
+    createdAt?: string;
+  };
   isOwn: boolean;
   senderName?: string;
 }

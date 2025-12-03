@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Copy, Check, Share2, ArrowLeft, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { socketService } from '../services/socketService';
+import { apiService } from '../services/apiService';
 
 export default function CreateLinkPage() {
   const { currentUser } = useAuth();
@@ -22,10 +23,13 @@ export default function CreateLinkPage() {
   }, [currentUser, navigate]);
 
   const generateNewCall = () => {
-    const newCallId = `room-${currentUser?.id}-${Date.now()}`;
-    setCallId(newCallId);
-    socketService.connect();
-    socketService.joinCall(newCallId, currentUser?.id || 0);
+    (async () => {
+      const created = await apiService.createCall();
+      const newCallId = created || `room-${currentUser?.id}-${Date.now()}`;
+      setCallId(newCallId);
+      socketService.connect();
+      socketService.joinCall(newCallId, currentUser?.id || 0);
+    })();
   };
 
   const fullLink = callId ? `${window.location.origin}/join/${callId}` : '';

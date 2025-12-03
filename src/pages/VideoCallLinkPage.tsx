@@ -3,12 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { X, Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Check, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { socketService } from '../services/socketService';
-import { users } from '../mock/mockData';
-
-interface RTCPeerConnection extends RTCPeerConnection {
-  onicecandidate: ((ev: RTCPeerConnectionIceEvent) => any) | null;
-  ontrack: ((ev: RTCTrackEvent) => any) | null;
-}
 
 export default function VideoCallLinkPage() {
   const { linkId } = useParams<{ linkId: string }>();
@@ -16,7 +10,7 @@ export default function VideoCallLinkPage() {
   const navigate = useNavigate();
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  // remote stream is applied directly to the video element; no need to keep in state
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -33,7 +27,11 @@ export default function VideoCallLinkPage() {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const otherUser = users.find(u => u.id !== currentUser?.id) || users[1];
+  const otherUser = {
+    id: 'remote',
+    name: 'Participant',
+    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(linkId || 'participant'))}`,
+  };
 
   useEffect(() => {
     initializeCall();
@@ -45,7 +43,7 @@ export default function VideoCallLinkPage() {
   useEffect(() => {
     if (isCallActive) {
       durationTimerRef.current = setInterval(() => {
-        setCallDuration(prev => prev + 1);
+        setCallDuration((prev: number) => prev + 1);
       }, 1000);
     }
     return () => {
@@ -84,10 +82,10 @@ export default function VideoCallLinkPage() {
       ],
     };
 
-    const pc = new RTCPeerConnection(peerConfig) as RTCPeerConnection;
+    const pc = new RTCPeerConnection(peerConfig);
     peerConnectionRef.current = pc;
 
-    mediaStream.getTracks().forEach(track => {
+    mediaStream.getTracks().forEach((track: MediaStreamTrack) => {
       pc.addTrack(track, mediaStream);
     });
 
@@ -99,7 +97,6 @@ export default function VideoCallLinkPage() {
 
     pc.ontrack = (event) => {
       console.log('Remote track received');
-      setRemoteStream(event.streams[0]);
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0];
       }
@@ -139,8 +136,9 @@ export default function VideoCallLinkPage() {
 
     socketService.onMessage((data) => {
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setMessages(prev => [...prev, {
-        sender: users.find(u => u.id === data.senderId)?.name || 'Unknown',
+      const senderName = String(data.senderId) || 'Unknown';
+      setMessages((prev: Array<{ sender: string; text: string; time: string }>) => [...prev, {
+        sender: senderName,
         text: data.body,
         time,
       }]);
@@ -201,7 +199,7 @@ export default function VideoCallLinkPage() {
     }
 
     if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+      localStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
     }
 
     socketService.disconnect();
@@ -242,9 +240,9 @@ export default function VideoCallLinkPage() {
 
   const handleSendMessage = () => {
     if (messageInput.trim() && linkId) {
-      socketService.sendMessage(parseInt(linkId) || 0, messageInput, currentUser?.id || 0);
+      socketService.sendMessage(linkId, messageInput, currentUser?.id || '');
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setMessages(prev => [...prev, {
+      setMessages((prev: Array<{ sender: string; text: string; time: string }>) => [...prev, {
         sender: currentUser?.name || 'You',
         text: messageInput,
         time,

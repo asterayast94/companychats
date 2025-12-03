@@ -1,21 +1,23 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
-import { users } from '../mock/mockData';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
-  const [selectedUserId, setSelectedUserId] = useState<number>(1);
+  const [username, setUsername] = useState<string>('alice');
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.id === selectedUserId);
-    if (user) {
-      login(user);
-      navigate('/chats');
-    }
+    if (!username.trim()) return;
+    const user = {
+      id: username.trim(),
+      name: username.trim(),
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username.trim())}`,
+    };
+    login(user);
+    navigate('/chats');
   };
 
   return (
@@ -31,21 +33,15 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label htmlFor="user" className="block text-sm font-medium text-gray-700 mb-2">
-              Choose User
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+              Enter Username
             </label>
-            <select
-              id="user"
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(Number(e.target.value))}
+            <input
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
-            >
-              {users.map(user => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <button

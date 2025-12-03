@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Video, VideoOff, Mic, MicOff, PhoneOff } from 'lucide-react';
-import { User } from '../mock/mockData';
 
 interface VideoCallModalProps {
-  otherUser: User;
+  otherUser: { id: string; name: string; avatar?: string };
   onClose: () => void;
 }
 
@@ -44,7 +43,7 @@ export default function VideoCallModal({ otherUser, onClose }: VideoCallModalPro
 
   const stopCall = () => {
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
     }
   };
 
