@@ -26,6 +26,7 @@ export default function VideoCallLinkPage() {
   const [showChat, setShowChat] = useState(false);
   const [messages, setMessages] = useState<Array<{ sender: string; text: string; time: string }>>([]);
   const [messageInput, setMessageInput] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -71,6 +72,7 @@ export default function VideoCallLinkPage() {
       connectSocket();
     } catch (err) {
       console.error('Error accessing media:', err);
+      setError('Camera/microphone access denied. Check permissions.');
       setIsConnecting(false);
     }
   };
@@ -115,7 +117,7 @@ export default function VideoCallLinkPage() {
   };
 
   const connectSocket = () => {
-    const socket = socketService.connect();
+    socketService.connect();
 
     if (linkId) {
       socketService.joinCall(linkId, currentUser?.id || 0);
@@ -145,11 +147,12 @@ export default function VideoCallLinkPage() {
     });
 
     socketService.onUserJoined(() => {
-      if (peerConnectionRef.current) {
-        createAndSendOffer();
-      } else {
-        setTimeout(createAndSendOffer, 1000);
-      }
+      console.log('User joined, creating offer');
+      setTimeout(() => {
+        if (peerConnectionRef.current) {
+          createAndSendOffer();
+        }
+      }, 500);
     });
   };
 
@@ -230,14 +233,16 @@ export default function VideoCallLinkPage() {
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (linkId) {
+      navigator.clipboard.writeText(linkId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleSendMessage = () => {
     if (messageInput.trim() && linkId) {
-      socketService.sendMessage(parseInt(linkId), messageInput, currentUser?.id || 0);
+      socketService.sendMessage(parseInt(linkId) || 0, messageInput, currentUser?.id || 0);
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setMessages(prev => [...prev, {
         sender: currentUser?.name || 'You',
@@ -267,7 +272,13 @@ export default function VideoCallLinkPage() {
             <div>
               <h3 className="text-white font-semibold">{otherUser.name}</h3>
               <p className="text-gray-400 text-sm">
-                {isConnecting ? 'Connecting...' : isCallActive ? `In call • ${formatTime(callDuration)}` : 'Waiting...'}
+                {error
+                  ? 'Error'
+                  : isConnecting
+                    ? 'Connecting...'
+                    : isCallActive
+                      ? `In call • ${formatTime(callDuration)}`
+                      : 'Waiting...'}
               </p>
             </div>
           </div>
@@ -280,7 +291,18 @@ export default function VideoCallLinkPage() {
         </div>
 
         <div className="flex-1 relative bg-gray-800 flex items-center justify-center overflow-hidden">
-          {isConnecting ? (
+          {error ? (
+            <div className="text-center text-white">
+              <div className="text-6xl mb-4">!</div>
+              <p className="text-lg">{error}</p>
+              <button
+                onClick={handleEndCall}
+                className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition"
+              >
+                Close
+              </button>
+            </div>
+          ) : isConnecting ? (
             <div className="text-center text-white">
               <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-teal-500 mx-auto mb-4"></div>
               <p className="text-lg">Connecting to {otherUser.name}...</p>
@@ -342,7 +364,7 @@ export default function VideoCallLinkPage() {
           <button
             onClick={handleCopyLink}
             className="p-4 bg-blue-600 hover:bg-blue-700 rounded-full transition text-white"
-            title="Copy link"
+            title="Copy room ID"
           >
             {copied ? <Check className="w-6 h-6" /> : <Copy className="w-6 h-6" />}
           </button>
@@ -355,6 +377,14 @@ export default function VideoCallLinkPage() {
             <PhoneOff className="w-6 h-6" />
           </button>
         </div>
+
+        {!isCallActive && !isConnecting && (
+          <div className="bg-gray-800 border-t border-gray-700 p-3 text-center">
+            <p className="text-gray-300 text-sm">
+              Room ID: <span className="font-mono text-teal-400">{linkId}</span>
+            </p>
+          </div>
+        )}
       </div>
 
       {showChat && (

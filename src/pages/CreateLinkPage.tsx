@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Copy, Check, Share2, Loader, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Copy, Check, Share2, ArrowLeft, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiService } from '../services/apiService';
 import { socketService } from '../services/socketService';
 
 export default function CreateLinkPage() {
-  const { linkId } = useParams<{ linkId: string }>();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [callId, setCallId] = useState<string | null>(null);
+  const [showJoinDialog, setShowJoinDialog] = useState(false);
+  const [joinRoomId, setJoinRoomId] = useState('');
 
   useEffect(() => {
     if (!currentUser) {
@@ -20,27 +18,15 @@ export default function CreateLinkPage() {
       return;
     }
 
-    const initializeCall = async () => {
-      try {
-        setIsLoading(true);
-        const newCallId = await apiService.createCall();
-        if (newCallId) {
-          setCallId(newCallId);
-          socketService.connect();
-          socketService.joinCall(newCallId, currentUser.id);
-        } else {
-          setError('Failed to create call');
-        }
-      } catch (err) {
-        console.error('Error:', err);
-        setError('An error occurred');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initializeCall();
+    generateNewCall();
   }, [currentUser, navigate]);
+
+  const generateNewCall = () => {
+    const newCallId = `room-${currentUser?.id}-${Date.now()}`;
+    setCallId(newCallId);
+    socketService.connect();
+    socketService.joinCall(newCallId, currentUser?.id || 0);
+  };
 
   const fullLink = callId ? `${window.location.origin}/join/${callId}` : '';
 
@@ -68,6 +54,13 @@ export default function CreateLinkPage() {
     }
   };
 
+  const handleJoinCall = () => {
+    if (joinRoomId.trim()) {
+      navigate(`/video-call/${joinRoomId}`);
+      setShowJoinDialog(false);
+    }
+  };
+
   if (!currentUser) return null;
 
   return (
@@ -85,39 +78,31 @@ export default function CreateLinkPage() {
           <div className="bg-teal-100 rounded-full p-4 mx-auto mb-4 w-fit">
             <Share2 className="w-8 h-8 text-teal-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Video Call Ready</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Video Call</h1>
           <p className="text-gray-600 text-sm">
-            Share this link with someone to start a video call
+            Start a call or join an existing one
           </p>
         </div>
 
-        {isLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader className="w-8 h-8 text-teal-600 animate-spin" />
-          </div>
-        ) : error ? (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
-        ) : (
+        {callId && (
           <>
             <div className="bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg p-4 mb-6 text-white text-center">
-              <p className="text-sm font-medium mb-1">Call ID: {callId?.slice(0, 8)}</p>
-              <p className="text-xs opacity-90">Ready to receive calls</p>
+              <p className="text-sm font-medium mb-1">Your Room ID</p>
+              <p className="text-xs font-mono break-all">{callId}</p>
             </div>
 
             <div className="space-y-3 mb-6">
               <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
                 <input
                   type="text"
-                  value={fullLink}
+                  value={callId}
                   readOnly
                   className="flex-1 text-xs text-gray-900 bg-transparent focus:outline-none truncate"
                 />
                 <button
                   onClick={handleCopyLink}
                   className="p-2 hover:bg-gray-200 rounded transition text-gray-600"
-                  title="Copy link"
+                  title="Copy room ID"
                 >
                   <Copy className="w-4 h-4" />
                 </button>
@@ -130,12 +115,12 @@ export default function CreateLinkPage() {
                 {copied ? (
                   <>
                     <Check className="w-5 h-5" />
-                    Copied!
+                    Room ID Copied!
                   </>
                 ) : (
                   <>
                     <Copy className="w-5 h-5" />
-                    Copy Link
+                    Copy Room ID
                   </>
                 )}
               </button>
@@ -151,15 +136,58 @@ export default function CreateLinkPage() {
               )}
             </div>
 
-            <button
-              onClick={handleStartCall}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition"
-            >
-              Start Call & Wait
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={handleStartCall}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition"
+              >
+                Start Hosting Call
+              </button>
+
+              <button
+                onClick={() => setShowJoinDialog(true)}
+                className="w-full border-2 border-green-600 text-green-600 hover:bg-green-50 font-semibold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Join Other Call
+              </button>
+            </div>
           </>
         )}
       </div>
+
+      {showJoinDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Join a Call</h2>
+            <p className="text-gray-600 text-sm mb-4">Enter the room ID to join an existing call</p>
+
+            <input
+              type="text"
+              value={joinRoomId}
+              onChange={(e) => setJoinRoomId(e.target.value)}
+              placeholder="e.g., room-1-1234567890"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 mb-4"
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowJoinDialog(false)}
+                className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleJoinCall}
+                disabled={!joinRoomId.trim()}
+                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition font-medium disabled:opacity-50"
+              >
+                Join Call
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
